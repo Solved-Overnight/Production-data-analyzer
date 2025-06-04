@@ -1,15 +1,19 @@
 
 "use client";
 
-import type { ProductionData, AccentColor, IndustryProductionData, ColorGroupItem } from '@/types';
+import type { ProductionData, AccentColor, IndustryProductionData } from '@/types';
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
-import { mockProductionData as initialMockData } from '@/lib/mock-data';
+// import { mockProductionData as initialMockData } from '@/lib/mock-data'; // No longer primary source
+import { extractProductionData } from '@/ai/flows/extract-production-data-flow';
+import type { ExtractProductionDataOutput, IndustryProductionDataOutput } from '@/ai/flows/extract-production-data-flow';
+import { useToast } from "@/hooks/use-toast";
+
 
 interface DashboardContextType {
   productionData: ProductionData | null;
-  setProductionData: (data: ProductionData | null) => void;
+  setProductionData: (data: ProductionData | null) => void; // Technically, this is now an internal detail post-extraction
   extractedText: string;
-  setExtractedText: (text: string) => void; // Keep for flexibility, though mainly driven by productionData
+  // setExtractedText: (text: string) => void; // Driven by productionData
   apiKey: string;
   setApiKey: (key: string) => void;
   isLoading: boolean;
@@ -34,16 +38,16 @@ const formatIndustryDataToText = (name: string, data: IndustryProductionData): s
   text += `Total = ${data.total.toLocaleString()} kg\n`;
   text += `Loading cap:\n`;
   data.loadingCapacity.forEach(item => {
-    const percentage = data.total > 0 ? (item.value / data.total * 100).toFixed(2) : "0.00";
+    const percentage = item.percentage !== undefined ? item.percentage.toFixed(2) : "0.00";
     text += `${item.name}: ${item.value.toLocaleString()} kg (${percentage}%)\n`;
   });
-  text += `\n`; // Added newline as per user's visual format
-  const inHousePercentage = data.total > 0 ? (data.inHouse.value / data.total * 100).toFixed(2) : "0.00";
+  text += `\n`;
+  const inHousePercentage = data.inHouse.percentage !== undefined ? data.inHouse.percentage.toFixed(2) : "0.00";
   text += `Inhouse: ${data.inHouse.value.toLocaleString()} kg (${inHousePercentage}%)\n`;
-  const subContractPercentage = data.total > 0 ? (data.subContract.value / data.total * 100).toFixed(2) : "0.00";
+  const subContractPercentage = data.subContract.percentage !== undefined ? data.subContract.percentage.toFixed(2) : "0.00";
   text += `Sub Contract: ${data.subContract.value.toLocaleString()} kg (${subContractPercentage}%)\n`;
-  text += `\n`; // Added newline
-  text += `LAB RFT: ${data.labRft !== undefined ? data.labRft : ''}\n`; // Handle potentially undefined labRft
+  text += `\n`;
+  text += `LAB RFT: ${data.labRft !== undefined ? data.labRft : ''}\n`;
   text += `Total this month: ${data.totalThisMonth.toLocaleString()} kg\n`;
   if (data.avgPerDay !== undefined) {
     text += `Avg/day: ${data.avgPerDay.toLocaleString(undefined, {maximumFractionDigits: 2})} kg\n`;
@@ -63,11 +67,12 @@ const formatProductionDataToText = (data: ProductionData | null): string => {
 };
 
 export const DashboardProvider = ({ children }: { children: ReactNode }) => {
-  const [productionData, setProductionDataState] = useState<ProductionData | null>(null);
+  const [productionDataState, setProductionDataState] = useState<ProductionData | null>(null);
   const [extractedText, setExtractedTextState] = useState<string>("");
   const [apiKey, setApiKeyState] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [currentAccent, setCurrentAccent] = useState<AccentColor>(availableAccentColors[0]);
+  const { toast } = useToast();
 
   useEffect(() => {
     const storedApiKey = localStorage.getItem('geminiApiKey');
@@ -82,72 +87,117 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   useEffect(() => {
-    document.documentElement.style.setProperty('--accent', currentAccent.value); // Ensure this matches globals.css variable --accent
+    document.documentElement.style.setProperty('--accent', currentAccent.value);
     localStorage.setItem('dashboardAccentColor', currentAccent.name);
   }, [currentAccent]);
 
-  const setProductionData = (data: ProductionData | null) => {
+  // This function now primarily serves to update text when productionData changes
+  const updateProductionDataAndText = (data: ProductionData | null) => {
     setProductionDataState(data);
     const formattedText = formatProductionDataToText(data);
     setExtractedTextState(formattedText);
   };
 
-  const setApiKey = (key: string) => {
+  const setApiKeyGlobal = (key: string) => {
     setApiKeyState(key);
     localStorage.setItem('geminiApiKey', key);
   };
 
-  const setAccentColor = (accent: AccentColor) => {
+  const setAccentColorGlobal = (accent: AccentColor) => {
     setCurrentAccent(accent);
   };
   
-  const clearDashboard = () => {
-    setProductionData(null);
-    setExtractedTextState("");
+  const clearDashboardGlobal = () => {
+    updateProductionDataAndText(null);
   };
 
-  const triggerFileUpload = (file: File) => {
+  const triggerFileUploadGlobal = (file: File) => {
+    if (!apiKey) {
+      toast({
+        title: "API Key Required",
+        description: "Please set your Gemini API key in settings to process PDFs.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsLoading(true);
-    console.log("Uploaded file (first page processing simulated):", file.name);
-    // Simulate PDF parsing and data extraction.
-    // In a real app, this would involve a PDF parsing library and then
-    // structuring the data into the ProductionData format.
-    // For now, we use the updated mockData.
-    setTimeout(() => {
-      // Recalculate percentages for mock data before setting it
-      const processedMockData = JSON.parse(JSON.stringify(initialMockData)) as ProductionData;
+    const reader = new FileReader();
 
-      const calculatePercentages = (industryData: IndustryProductionData) => {
-        industryData.loadingCapacity.forEach(item => {
-          item.percentage = industryData.total > 0 ? parseFloat((item.value / industryData.total * 100).toFixed(2)) : 0;
-        });
-        industryData.inHouse.percentage = industryData.total > 0 ? parseFloat((industryData.inHouse.value / industryData.total * 100).toFixed(2)) : 0;
-        industryData.subContract.percentage = industryData.total > 0 ? parseFloat((industryData.subContract.value / industryData.total * 100).toFixed(2)) : 0;
-      };
+    reader.onloadend = async () => {
+      const pdfDataUri = reader.result as string;
+      try {
+        const rawExtractedData: ExtractProductionDataOutput = await extractProductionData({ pdfDataUri });
 
-      calculatePercentages(processedMockData.lantabur);
-      calculatePercentages(processedMockData.taqwa);
-      
-      setProductionData(processedMockData);
+        const daysInMonth = 30; // Assumption for Avg/day calculation
+
+        const processIndustryData = (rawData: IndustryProductionDataOutput): IndustryProductionData => {
+          const industryData: IndustryProductionData = {
+            total: rawData.total,
+            loadingCapacity: rawData.loadingCapacity.map(item => ({ name: item.name, value: item.value })),
+            inHouse: { value: rawData.inHouse.value },
+            subContract: { value: rawData.subContract.value },
+            labRft: rawData.labRft || "",
+            totalThisMonth: rawData.totalThisMonth,
+            avgPerDay: rawData.totalThisMonth / daysInMonth,
+          };
+
+          industryData.loadingCapacity.forEach(item => {
+            item.percentage = industryData.total > 0 ? parseFloat((item.value / industryData.total * 100).toFixed(2)) : 0;
+          });
+          industryData.inHouse.percentage = industryData.total > 0 ? parseFloat((industryData.inHouse.value / industryData.total * 100).toFixed(2)) : 0;
+          industryData.subContract.percentage = industryData.total > 0 ? parseFloat((industryData.subContract.value / industryData.total * 100).toFixed(2)) : 0;
+          
+          return industryData;
+        };
+        
+        const processedData: ProductionData = {
+          date: rawExtractedData.date,
+          lantabur: processIndustryData(rawExtractedData.lantabur),
+          taqwa: processIndustryData(rawExtractedData.taqwa),
+        };
+        
+        updateProductionDataAndText(processedData);
+        toast({ title: "PDF Processed", description: "Data extracted successfully." });
+
+      } catch (error) {
+        console.error("Error extracting data from PDF:", error);
+        updateProductionDataAndText(null); 
+        let errorMessage = "Could not extract data from the PDF.";
+        if (error instanceof Error) {
+            errorMessage = error.message.includes("model did not return the expected output structure") 
+            ? "AI model failed to return data in the expected format. The PDF might not match the fixed format." 
+            : error.message;
+        }
+        toast({ title: "PDF Processing Failed", description: errorMessage, variant: "destructive" });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    reader.onerror = () => {
+      console.error("Error reading file.");
       setIsLoading(false);
-    }, 1500);
+      toast({ title: "File Read Error", description: "Could not read the selected file.", variant: "destructive" });
+    };
+
+    reader.readAsDataURL(file);
   };
 
   return (
     <DashboardContext.Provider
       value={{
-        productionData,
-        setProductionData,
+        productionData: productionDataState,
+        setProductionData: updateProductionDataAndText, 
         extractedText,
-        setExtractedText: setExtractedTextState, // Allow direct setting if ever needed
         apiKey,
-        setApiKey,
+        setApiKey: setApiKeyGlobal,
         isLoading,
         setIsLoading,
-        clearDashboard,
-        triggerFileUpload,
+        clearDashboard: clearDashboardGlobal,
+        triggerFileUpload: triggerFileUploadGlobal,
         currentAccent,
-        setAccentColor,
+        setAccentColor: setAccentColorGlobal,
       }}
     >
       {children}
