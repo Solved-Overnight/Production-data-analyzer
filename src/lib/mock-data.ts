@@ -1,52 +1,44 @@
+
 import type { ProductionData } from '@/types';
 
+// Data extracted from the provided image
+const lantaburTotal = 13266.2;
+const taqwaTotal = 24058;
+const daysInMonth = 30; // Assumption for Avg/day calculation
+
 export const mockProductionData: ProductionData = {
-  reportTitle: "Q3 Production Report 2024",
-  industryName: "Lantabur & Taqwa Industries",
-  period: "July 2024 - September 2024",
-  totalUnitsProduced: 15000,
-  productionBreakdown: {
-    inHouse: 10000,
-    subContracted: 5000,
+  date: "02 Jun 2025", // From user's example
+  lantabur: {
+    total: lantaburTotal,
+    loadingCapacity: [
+      { name: "Black", value: 2853 },
+      { name: "100% Polyster", value: 717 }, // Mapping to user's "White" example structure if needed, but using image label
+      { name: "Double Part", value: 5442 + 581.2 }, // Combined "Double Part" and "Double Part -Blac"
+      { name: "Average", value: 3673 },
+    ],
+    inHouse: { value: 12934.2 },
+    subContract: { value: 332 },
+    labRft: "0% (0 out of 1)", // From user's example
+    totalThisMonth: lantaburTotal,
+    avgPerDay: lantaburTotal / daysInMonth,
   },
-  loadingCapacity: {
-    capacityUsed: 750,
-    totalCapacity: 1000,
-    unit: "tons",
+  taqwa: {
+    total: taqwaTotal,
+    loadingCapacity: [
+      { name: "Double Part", value: 4766.5 + 2824 }, // Combined "Double Part" and "Double Part -Blac"
+      { name: "Average", value: 13182 },
+      { name: "Black", value: 1101.5 },
+      { name: "White", value: 2156 },
+      { name: "N/wash", value: 28 },
+      // "Royal" from user example is not in the image data for Taqwa Color Group Wise
+    ],
+    inHouse: { value: 22954 },
+    subContract: { value: 1104 },
+    labRft: "", // From user's example
+    totalThisMonth: taqwaTotal,
+    avgPerDay: taqwaTotal / daysInMonth,
   },
-  monthlyProduction: [
-    { month: "July", year: 2024, units: 4500 },
-    { month: "August", year: 2024, units: 5000 },
-    { month: "September", year: 2024, units: 5500 },
-  ],
-  keyObservations: [
-    "Increased subcontracting in Q3 due to machinery maintenance.",
-    "Loading capacity utilization at 75%, room for growth.",
-    "Consistent month-over-month production increase.",
-  ],
 };
 
-export const getMockExtractedText = (data: ProductionData | null): string => {
-  if (!data) return "No data available.";
-  return `
-Report Title: ${data.reportTitle}
-Industry: ${data.industryName}
-Period: ${data.period}
-
-Production Summary:
-  Total Units: ${data.totalUnitsProduced}
-  In-House: ${data.productionBreakdown.inHouse}
-  Sub-Contracted: ${data.productionBreakdown.subContracted}
-
-Loading Capacity (${data.loadingCapacity.unit}):
-  Used: ${data.loadingCapacity.capacityUsed}
-  Total: ${data.loadingCapacity.totalCapacity}
-  Utilization: ${(data.loadingCapacity.capacityUsed / data.loadingCapacity.totalCapacity * 100).toFixed(1)}%
-
-Monthly Output:
-${data.monthlyProduction.map(m => `  - ${m.month} ${m.year}: ${m.units} units`).join('\n')}
-
-Key Observations:
-${data.keyObservations?.map(obs => `  - ${obs}`).join('\n') || '  N/A'}
-`.trim();
-};
+// This function is no longer used as formatting is handled in DashboardContext
+// export const getMockExtractedText = (data: ProductionData | null): string => { ... }

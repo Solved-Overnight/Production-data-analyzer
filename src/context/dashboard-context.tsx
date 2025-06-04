@@ -1,14 +1,15 @@
+
 "use client";
 
-import type { ProductionData, AccentColor } from '@/types';
+import type { ProductionData, AccentColor, IndustryProductionData, ColorGroupItem } from '@/types';
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
-import { mockProductionData } from '@/lib/mock-data'; // Default data on load
+import { mockProductionData as initialMockData } from '@/lib/mock-data';
 
 interface DashboardContextType {
   productionData: ProductionData | null;
   setProductionData: (data: ProductionData | null) => void;
   extractedText: string;
-  setExtractedText: (text: string) => void;
+  setExtractedText: (text: string) => void; // Keep for flexibility, though mainly driven by productionData
   apiKey: string;
   setApiKey: (key: string) => void;
   isLoading: boolean;
@@ -28,9 +29,42 @@ export const availableAccentColors: AccentColor[] = [
   { name: 'Coral', value: '16 100% 70%' },
 ];
 
+const formatIndustryDataToText = (name: string, data: IndustryProductionData): string => {
+  let text = `╰─>${name} Data:\n`;
+  text += `Total = ${data.total.toLocaleString()} kg\n`;
+  text += `Loading cap:\n`;
+  data.loadingCapacity.forEach(item => {
+    const percentage = data.total > 0 ? (item.value / data.total * 100).toFixed(2) : "0.00";
+    text += `${item.name}: ${item.value.toLocaleString()} kg (${percentage}%)\n`;
+  });
+  text += `\n`; // Added newline as per user's visual format
+  const inHousePercentage = data.total > 0 ? (data.inHouse.value / data.total * 100).toFixed(2) : "0.00";
+  text += `Inhouse: ${data.inHouse.value.toLocaleString()} kg (${inHousePercentage}%)\n`;
+  const subContractPercentage = data.total > 0 ? (data.subContract.value / data.total * 100).toFixed(2) : "0.00";
+  text += `Sub Contract: ${data.subContract.value.toLocaleString()} kg (${subContractPercentage}%)\n`;
+  text += `\n`; // Added newline
+  text += `LAB RFT: ${data.labRft !== undefined ? data.labRft : ''}\n`; // Handle potentially undefined labRft
+  text += `Total this month: ${data.totalThisMonth.toLocaleString()} kg\n`;
+  if (data.avgPerDay !== undefined) {
+    text += `Avg/day: ${data.avgPerDay.toLocaleString(undefined, {maximumFractionDigits: 2})} kg\n`;
+  }
+  return text;
+};
+
+
+const formatProductionDataToText = (data: ProductionData | null): string => {
+  if (!data) return "No data available.";
+
+  let output = `Date: ${data.date}\n\n`;
+  output += formatIndustryDataToText("Lantabur", data.lantabur);
+  output += `\n`;
+  output += formatIndustryDataToText("Taqwa", data.taqwa);
+  return output.trim();
+};
+
 export const DashboardProvider = ({ children }: { children: ReactNode }) => {
   const [productionData, setProductionDataState] = useState<ProductionData | null>(null);
-  const [extractedText, setExtractedText] = useState<string>("");
+  const [extractedText, setExtractedTextState] = useState<string>("");
   const [apiKey, setApiKeyState] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [currentAccent, setCurrentAccent] = useState<AccentColor>(availableAccentColors[0]);
@@ -48,39 +82,15 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   useEffect(() => {
-    document.documentElement.style.setProperty('--accent-custom', currentAccent.value);
+    document.documentElement.style.setProperty('--accent', currentAccent.value); // Ensure this matches globals.css variable --accent
     localStorage.setItem('dashboardAccentColor', currentAccent.name);
   }, [currentAccent]);
 
-
   const setProductionData = (data: ProductionData | null) => {
     setProductionDataState(data);
-    // Simulate text extraction
-    if (data) {
-        // This would be replaced by actual PDF parsing logic
-        const yamlText = `
-reportTitle: "${data.reportTitle}"
-industryName: "${data.industryName}"
-period: "${data.period}"
-totalUnitsProduced: ${data.totalUnitsProduced}
-productionBreakdown:
-  inHouse: ${data.productionBreakdown.inHouse}
-  subContracted: ${data.productionBreakdown.subContracted}
-loadingCapacity:
-  capacityUsed: ${data.loadingCapacity.capacityUsed}
-  totalCapacity: ${data.loadingCapacity.totalCapacity}
-  unit: "${data.loadingCapacity.unit}"
-monthlyProduction:
-${data.monthlyProduction.map(item => `  - month: "${item.month}"\n    year: ${item.year}\n    units: ${item.units}`).join('\n')}
-keyObservations:
-${data.keyObservations ? data.keyObservations.map(item => `  - "${item}"`).join('\n') : '  []'}
-        `.trim();
-        setExtractedText(yamlText);
-    } else {
-        setExtractedText("");
-    }
+    const formattedText = formatProductionDataToText(data);
+    setExtractedTextState(formattedText);
   };
-
 
   const setApiKey = (key: string) => {
     setApiKeyState(key);
@@ -93,22 +103,35 @@ ${data.keyObservations ? data.keyObservations.map(item => `  - "${item}"`).join(
   
   const clearDashboard = () => {
     setProductionData(null);
-    setExtractedText("");
-    // Optionally clear file input if it's managed here or via ref
+    setExtractedTextState("");
   };
 
   const triggerFileUpload = (file: File) => {
     setIsLoading(true);
-    // Simulate PDF parsing from the first page of a fixed format PDF
-    // In a real app, use a library like pdf.js here.
-    // For now, we'll just use mock data after a short delay.
     console.log("Uploaded file (first page processing simulated):", file.name);
+    // Simulate PDF parsing and data extraction.
+    // In a real app, this would involve a PDF parsing library and then
+    // structuring the data into the ProductionData format.
+    // For now, we use the updated mockData.
     setTimeout(() => {
-      setProductionData(mockProductionData);
+      // Recalculate percentages for mock data before setting it
+      const processedMockData = JSON.parse(JSON.stringify(initialMockData)) as ProductionData;
+
+      const calculatePercentages = (industryData: IndustryProductionData) => {
+        industryData.loadingCapacity.forEach(item => {
+          item.percentage = industryData.total > 0 ? parseFloat((item.value / industryData.total * 100).toFixed(2)) : 0;
+        });
+        industryData.inHouse.percentage = industryData.total > 0 ? parseFloat((industryData.inHouse.value / industryData.total * 100).toFixed(2)) : 0;
+        industryData.subContract.percentage = industryData.total > 0 ? parseFloat((industryData.subContract.value / industryData.total * 100).toFixed(2)) : 0;
+      };
+
+      calculatePercentages(processedMockData.lantabur);
+      calculatePercentages(processedMockData.taqwa);
+      
+      setProductionData(processedMockData);
       setIsLoading(false);
     }, 1500);
   };
-
 
   return (
     <DashboardContext.Provider
@@ -116,7 +139,7 @@ ${data.keyObservations ? data.keyObservations.map(item => `  - "${item}"`).join(
         productionData,
         setProductionData,
         extractedText,
-        setExtractedText,
+        setExtractedText: setExtractedTextState, // Allow direct setting if ever needed
         apiKey,
         setApiKey,
         isLoading,

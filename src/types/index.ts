@@ -1,19 +1,24 @@
+
+export interface ColorGroupItem {
+  name: string;
+  value: number;
+  percentage?: number; // Calculated
+}
+
+export interface IndustryProductionData {
+  total: number;
+  loadingCapacity: ColorGroupItem[];
+  inHouse: { value: number; percentage?: number };
+  subContract: { value: number; percentage?: number };
+  labRft?: string;
+  totalThisMonth: number;
+  avgPerDay?: number; // Calculated
+}
+
 export interface ProductionData {
-  reportTitle: string;
-  industryName: string;
-  period: string;
-  totalUnitsProduced: number;
-  productionBreakdown: {
-    inHouse: number;
-    subContracted: number;
-  };
-  loadingCapacity: {
-    capacityUsed: number;
-    totalCapacity: number;
-    unit: string;
-  };
-  monthlyProduction: Array<{ month: string; year: number; units: number }>;
-  keyObservations?: string[];
+  date: string; // e.g., "02 Jun 2025"
+  lantabur: IndustryProductionData;
+  taqwa: IndustryProductionData;
 }
 
 export interface AccentColor {

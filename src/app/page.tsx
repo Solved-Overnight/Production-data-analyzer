@@ -1,3 +1,4 @@
+
 "use client"
 
 import { SiteHeader } from '@/components/site-header'
@@ -6,25 +7,26 @@ import { PdfUploadCard } from '@/components/dashboard/pdf-upload-card'
 import { DataSummaryCard } from '@/components/dashboard/data-summary-card'
 import { ActionButtons } from '@/components/dashboard/action-buttons'
 import { AiInsightsCard } from '@/components/dashboard/ai-insights-card'
-import { ChartCard } from '@/components/dashboard/chart-card'
-import { InhouseSubcontractChart } from '@/components/dashboard/inhouse-subcontract-chart'
-import { LoadingCapacityChart } from '@/components/dashboard/loading-capacity-chart'
-import { MonthlyComparisonChart } from '@/components/dashboard/monthly-comparison-chart'
+// ChartCard and specific charts are removed as they are not compatible with the new data structure
+// import { ChartCard } from '@/components/dashboard/chart-card'
+// import { InhouseSubcontractChart } from '@/components/dashboard/inhouse-subcontract-chart'
+// import { LoadingCapacityChart } from '@/components/dashboard/loading-capacity-chart'
+// import { MonthlyComparisonChart } from '@/components/dashboard/monthly-comparison-chart'
 import { motion } from "framer-motion"
 
 function DashboardLayout() {
   const { productionData } = useDashboard();
 
-  const chartContainerVariants = {
-    hidden: { opacity: 0 },
-    visible: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.2,
-        delayChildren: 0.3,
-      }
-    }
-  };
+  // const chartContainerVariants = {
+  //   hidden: { opacity: 0 },
+  //   visible: {
+  //     opacity: 1,
+  //     transition: {
+  //       staggerChildren: 0.2,
+  //       delayChildren: 0.3,
+  //     }
+  //   }
+  // };
 
   return (
     <div className="flex flex-col min-h-screen bg-background">
@@ -41,7 +43,11 @@ function DashboardLayout() {
           </div>
         </div>
 
-        {productionData && (
+        {/* 
+          The charts section is removed as the old charts are not compatible 
+          with the new data structure. New charts can be added here later if needed.
+        */}
+        {/* {productionData && (
            <motion.div 
             className="grid grid-cols-1 lg:grid-cols-3 gap-6"
             variants={chartContainerVariants}
@@ -51,7 +57,7 @@ function DashboardLayout() {
             <ChartCard
               title="Production Mix"
               chartType="Pie Chart"
-              chartData={productionData.productionBreakdown}
+              chartData={productionData.productionBreakdown} // This structure changed
               dataAiHint="pie chart production"
             >
               <InhouseSubcontractChart />
@@ -59,7 +65,7 @@ function DashboardLayout() {
             <ChartCard
               title="Loading Capacity Utilization"
               chartType="Bar Chart"
-              chartData={productionData.loadingCapacity}
+              chartData={productionData.loadingCapacity} // This structure changed
               dataAiHint="bar chart capacity"
             >
               <LoadingCapacityChart />
@@ -67,13 +73,13 @@ function DashboardLayout() {
             <ChartCard
               title="Monthly Production Trend"
               chartType="Line Chart"
-              chartData={productionData.monthlyProduction}
+              chartData={productionData.monthlyProduction} // This structure changed
               dataAiHint="line graph trend"
             >
               <MonthlyComparisonChart />
             </ChartCard>
           </motion.div>
-        )}
+        )} */}
       </main>
       <footer className="py-6 text-center text-sm text-muted-foreground border-t">
         Lantabur Production Dashboard &copy; {new Date().getFullYear()}
