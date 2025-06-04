@@ -1,19 +1,15 @@
 
 "use client";
 
-import type { ProductionData, AccentColor, IndustryProductionData } from '@/types';
+import type { ProductionData, AccentColor, IndustryProductionData, ColorGroupItem } from '@/types';
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
-// import { mockProductionData as initialMockData } from '@/lib/mock-data'; // No longer primary source
 import { extractProductionData } from '@/ai/flows/extract-production-data-flow';
-import type { ExtractProductionDataOutput, IndustryProductionDataOutput } from '@/ai/flows/extract-production-data-flow';
+import type { ExtractProductionDataOutput, IndustryProductionDataOutput as AiIndustryDataOutput } from '@/ai/flows/extract-production-data-flow';
 import { useToast } from "@/hooks/use-toast";
-
 
 interface DashboardContextType {
   productionData: ProductionData | null;
-  setProductionData: (data: ProductionData | null) => void; // Technically, this is now an internal detail post-extraction
   extractedText: string;
-  // setExtractedText: (text: string) => void; // Driven by productionData
   apiKey: string;
   setApiKey: (key: string) => void;
   isLoading: boolean;
@@ -35,26 +31,27 @@ export const availableAccentColors: AccentColor[] = [
 
 const formatIndustryDataToText = (name: string, data: IndustryProductionData): string => {
   let text = `╰─>${name} Data:\n`;
-  text += `Total = ${data.total.toLocaleString()} kg\n`;
+  text += `Total = ${data.dailyProductionTotal.toLocaleString()} kg\n`;
   text += `Loading cap:\n`;
   data.loadingCapacity.forEach(item => {
     const percentage = item.percentage !== undefined ? item.percentage.toFixed(2) : "0.00";
     text += `${item.name}: ${item.value.toLocaleString()} kg (${percentage}%)\n`;
   });
   text += `\n`;
+  
   const inHousePercentage = data.inHouse.percentage !== undefined ? data.inHouse.percentage.toFixed(2) : "0.00";
   text += `Inhouse: ${data.inHouse.value.toLocaleString()} kg (${inHousePercentage}%)\n`;
+  
   const subContractPercentage = data.subContract.percentage !== undefined ? data.subContract.percentage.toFixed(2) : "0.00";
   text += `Sub Contract: ${data.subContract.value.toLocaleString()} kg (${subContractPercentage}%)\n`;
   text += `\n`;
-  text += `LAB RFT: ${data.labRft !== undefined ? data.labRft : ''}\n`;
-  text += `Total this month: ${data.totalThisMonth.toLocaleString()} kg\n`;
-  if (data.avgPerDay !== undefined) {
-    text += `Avg/day: ${data.avgPerDay.toLocaleString(undefined, {maximumFractionDigits: 2})} kg\n`;
-  }
+  
+  text += `LAB RFT: ${data.labRft !== undefined && data.labRft !== "" ? data.labRft : ''}\n`; // Show empty if undefined or empty string
+  text += `Total this month: ${data.totalThisMonth !== undefined ? data.totalThisMonth.toLocaleString() + ' kg' : ''}\n`;
+  text += `Avg/day: ${data.avgPerDay !== undefined ? data.avgPerDay.toLocaleString(undefined, {maximumFractionDigits: 2}) + ' kg' : ''}\n`;
+  
   return text;
 };
-
 
 const formatProductionDataToText = (data: ProductionData | null): string => {
   if (!data) return "No data available.";
@@ -63,6 +60,11 @@ const formatProductionDataToText = (data: ProductionData | null): string => {
   output += formatIndustryDataToText("Lantabur", data.lantabur);
   output += `\n`;
   output += formatIndustryDataToText("Taqwa", data.taqwa);
+
+  // Optionally, include overallGrandTotal if it exists and you want to display it
+  // if (data.overallGrandTotal !== undefined) {
+  //   output += `\nOverall Grand Total: ${data.overallGrandTotal.toLocaleString()} kg\n`;
+  // }
   return output.trim();
 };
 
@@ -91,7 +93,6 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
     localStorage.setItem('dashboardAccentColor', currentAccent.name);
   }, [currentAccent]);
 
-  // This function now primarily serves to update text when productionData changes
   const updateProductionDataAndText = (data: ProductionData | null) => {
     setProductionDataState(data);
     const formattedText = formatProductionDataToText(data);
@@ -131,30 +132,41 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
 
         const daysInMonth = 30; // Assumption for Avg/day calculation
 
-        const processIndustryData = (rawData: IndustryProductionDataOutput): IndustryProductionData => {
-          const industryData: IndustryProductionData = {
-            total: rawData.total,
-            loadingCapacity: rawData.loadingCapacity.map(item => ({ name: item.name, value: item.value })),
-            inHouse: { value: rawData.inHouse.value },
-            subContract: { value: rawData.subContract.value },
-            labRft: rawData.labRft || "",
-            totalThisMonth: rawData.totalThisMonth,
-            avgPerDay: rawData.totalThisMonth / daysInMonth,
-          };
-
-          industryData.loadingCapacity.forEach(item => {
-            item.percentage = industryData.total > 0 ? parseFloat((item.value / industryData.total * 100).toFixed(2)) : 0;
-          });
-          industryData.inHouse.percentage = industryData.total > 0 ? parseFloat((industryData.inHouse.value / industryData.total * 100).toFixed(2)) : 0;
-          industryData.subContract.percentage = industryData.total > 0 ? parseFloat((industryData.subContract.value / industryData.total * 100).toFixed(2)) : 0;
+        const processIndustryData = (aiData: AiIndustryDataOutput): IndustryProductionData => {
+          const industryTotal = aiData.dailyProductionTotal || 0;
           
-          return industryData;
+          const processedLoadingCapacity: ColorGroupItem[] = (aiData.loadingCapacity || []).map(item => ({
+            name: item.name,
+            value: item.value,
+            percentage: industryTotal > 0 ? parseFloat(((item.value || 0) / industryTotal * 100).toFixed(2)) : 0,
+          }));
+
+          const inHouseValue = aiData.inHouse?.value || 0;
+          const subContractValue = aiData.subContract?.value || 0;
+
+          const processedIndustryData: IndustryProductionData = {
+            dailyProductionTotal: industryTotal,
+            loadingCapacity: processedLoadingCapacity,
+            inHouse: { 
+              value: inHouseValue,
+              percentage: industryTotal > 0 ? parseFloat((inHouseValue / industryTotal * 100).toFixed(2)) : 0,
+            },
+            subContract: { 
+              value: subContractValue,
+              percentage: industryTotal > 0 ? parseFloat((subContractValue / industryTotal * 100).toFixed(2)) : 0,
+            },
+            labRft: aiData.labRft, // Directly from AI (optional)
+            totalThisMonth: aiData.totalThisMonth, // Directly from AI (optional)
+            avgPerDay: aiData.totalThisMonth !== undefined ? (aiData.totalThisMonth / daysInMonth) : undefined,
+          };
+          return processedIndustryData;
         };
         
         const processedData: ProductionData = {
-          date: rawExtractedData.date,
+          date: rawExtractedData.date || "N/A",
           lantabur: processIndustryData(rawExtractedData.lantabur),
           taqwa: processIndustryData(rawExtractedData.taqwa),
+          overallGrandTotal: rawExtractedData.overallGrandTotal,
         };
         
         updateProductionDataAndText(processedData);
@@ -166,7 +178,7 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
         let errorMessage = "Could not extract data from the PDF.";
         if (error instanceof Error) {
             errorMessage = error.message.includes("model did not return the expected output structure") 
-            ? "AI model failed to return data in the expected format. The PDF might not match the fixed format." 
+            ? "AI model failed to return data in the expected format. The PDF might not match the fixed format or required data is missing." 
             : error.message;
         }
         toast({ title: "PDF Processing Failed", description: errorMessage, variant: "destructive" });
@@ -188,7 +200,6 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
     <DashboardContext.Provider
       value={{
         productionData: productionDataState,
-        setProductionData: updateProductionDataAndText, 
         extractedText,
         apiKey,
         setApiKey: setApiKeyGlobal,
@@ -212,3 +223,4 @@ export const useDashboard = (): DashboardContextType => {
   }
   return context;
 };
+
